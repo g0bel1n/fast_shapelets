@@ -2,14 +2,16 @@ import csv
 import os
 import pickle
 
+import numpy as np
 import requests
 
 __supported_datasets = ["StarLightCurves"]
 
+
 def download_dataset(dataset_name: str):
     """
     Download a dataset from the internet and save it to disk
-    
+
     :param dataset_name: The name of the dataset to download
     :type dataset_name: str
     """
@@ -57,7 +59,7 @@ def download_dataset(dataset_name: str):
 def assert_root_dir(root_dir: str = "fast_shapelets"):
     """
     It checks that the current working directory is the root directory of the project
-    
+
     :param root_dir: The directory where the data is stored, defaults to fast_shapelets
     :type root_dir: str (optional)
     """
@@ -72,11 +74,11 @@ def assert_root_dir(root_dir: str = "fast_shapelets"):
         raise Exception("Please run this script from the root directory of the project")
 
 
-def get_dataset(dataset_name: str):
+def get_dataset(dataset_name: str) -> tuple:
     """
     > It downloads the dataset if it doesn't exist, and then loads the train and test data from the
     pickle files
-    
+
     :param dataset_name: The name of the dataset you want to download
     :type dataset_name: str
     :return: The train and test data for the dataset.
@@ -92,10 +94,9 @@ def get_dataset(dataset_name: str):
         print(f"Dataset {dataset_name} loading from cache \n")
 
     with open(f"data/{dataset_name}/{dataset_name}_TRAIN.pkl", "rb") as train_file:
-        train_data = pickle.load(train_file)
+        train_data = np.array(pickle.load(train_file))
 
     with open(f"data/{dataset_name}/{dataset_name}_TEST.pkl", "rb") as test_file:
-        test_data = pickle.load(test_file)
+        test_data = np.array(pickle.load(test_file))
 
-    return train_data, test_data
-
+    return train_data[:, 1:], train_data[:, 0], test_data[:, 1:], test_data[:, 0]
