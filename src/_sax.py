@@ -76,7 +76,6 @@ class SAX(TransformerMixin):
             )
             paa_reps = paa_reps.T
 
-
         splits = self.get_splits(X_)
 
         raw_sax_words = np.apply_along_axis(
