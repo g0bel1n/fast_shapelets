@@ -76,7 +76,6 @@ class SAX(TransformerMixin):
             )
             paa_reps = paa_reps.T
 
-        print(paa_reps.shape)
 
         splits = self.get_splits(X_)
 
