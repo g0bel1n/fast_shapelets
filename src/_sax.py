@@ -1,7 +1,8 @@
+from typing import Optional
+
 import numpy as np
 import scipy.stats as sps
 from sklearn.base import TransformerMixin
-from typing import Optional
 
 
 def evaluate_gaussianness(X: np.ndarray, y=None) -> float:
@@ -60,7 +61,7 @@ class SAX(TransformerMixin):
         # if evaluate_gaussianness(X_) > 0.05:
         #     raise Warning("The data is not gaussian, the SAX representation might not be accurate")
 
-        if X.shape[1] % self.dimensionnality:
+        if X.shape[1] % self.dimensionnality != 0:
             paa_reps = [
                 [
                     np.mean(el, axis=-1)
@@ -85,4 +86,4 @@ class SAX(TransformerMixin):
             lambda x: "".join([chr(97 + i) for i in x]), -1, raw_sax_words
         )
 
-        return sax_words  # sax_words of shape (n_samples, n_possible_subsequences, word_length) or (n_samples, word_length) if n_possible_subsequences = 1
+        return sax_words  # sax_words of shape (n_samples, n_possible_subsequences) or (n_samples,) if n_possible_subsequences = 1

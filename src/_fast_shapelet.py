@@ -1,29 +1,7 @@
 import numpy as np
 
-
-def get_random_hash(n: int = 10, word_size: int = 10) -> np.ndarray:
-    """
-    > It generates a random hash of length n
-
-    :param n: The length of the hash, defaults to 10
-    :type n: int, optional
-    :return: The random hash
-    :rtype: np.array(dtype=np.int32)
-    """
-    return np.random.binomial(n=1, p=.7, size=(n, word_size)).astype(bool)
-
-def apply_mask(word: str, mask: np.ndarray) -> str:
-    """
-    > It applies a mask to a word
-
-    :param word: The word to apply the mask to
-    :type word: str
-    :param mask: The mask to apply to the word
-    :type mask: np.array(dtype=np.int32)
-    :return: The masked word
-    :rtype: str
-    """
-    return "".join([letter for letter, mask in zip(word, mask) if mask]) #or ''.join(np.array(list(sax_string))[mask])
+from ._sax import SAX
+from ._utils import apply_mask, get_random_hash
 
 
 class FastShapelet:
@@ -52,10 +30,57 @@ class FastShapelet:
         random_hashes = get_random_hash(r,len(objs[0]))
         for hash_mask in random_hashes:
             projected_words = np.array([apply_mask(obj, hash_mask) for obj in objs])
-            unique_words, _ = np.unique(projected_words, return_counts=True)
+            unique_words = np.unique(projected_words)
             for unique_word in unique_words:
                 ids_to_update = np.where(unique_word == projected_words)[0]
                 for id_to_update in ids_to_update:
                     collision_table[id_to_update, idx_table[projected_words == unique_word]] += 1
 
         return collision_table
+    
+
+    @staticmethod
+    def _compute_distinguishing_score(
+        collision_table: np.ndarray, obj_classes: int
+    ) -> np.ndarray:
+        """
+        Computes the distinguishing score for the given collision table.
+
+        :param collision_table: The collision table to compute the distinguishing score for.
+        :param n_samples: The number of samples.
+        :return: The distinguishing score.
+        """
+
+        n_classes = np.unique(obj_classes).shape[0]
+
+        #group collision table cols by class
+        
+        close2ref = np.zeros((collision_table.shape[0], n_classes))        
+        for cls in np.unique(obj_classes):
+            close2ref[:,int(cls)] = np.sum(collision_table[:,obj_classes == cls], axis=-1)
+
+        farRef = np.max(close2ref) - close2ref
+
+        return np.sum(np.abs(close2ref - farRef), axis=-1)
+    
+    @staticmethod
+    def _find_top_k(distinguishing_scores: np.ndarray, k:int = 10):
+        """
+        Finds the top k distinguishing scores.
+
+        :param distinguishing_scores: The distinguishing scores to find the top k for.
+        :param k: The number of top scores to return.
+        :return: The top k distinguishing scores.
+        """
+        return np.argsort(distinguishing_scores)[-k:]
+    
+    def fit(self, X, y):
+        for word_len in range(1, self.max_shapelet_length + 1):
+            sax_strings = SAX(dimensionnality=word_len, cardinality=4).transform(X)
+            collision_table = self._compute_collision_table(sax_strings, r=10)
+            distinguishing_scores = self._compute_distinguishing_score(collision_table, y)
+            top_k = self._find_top_k(distinguishing_scores, k=10)
+            print(top_k)
+            print(distinguishing_scores[top_k])
+            #### Manque la suite
+       

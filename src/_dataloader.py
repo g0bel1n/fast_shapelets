@@ -5,7 +5,7 @@ import pickle
 import numpy as np
 import requests
 
-__supported_datasets = ["StarLightCurves"]
+__supported_datasets__ = ["StarLightCurves"]
 
 
 def download_dataset(dataset_name: str):
@@ -86,7 +86,7 @@ def get_dataset(dataset_name: str) -> tuple:
 
     assert_root_dir()
 
-    assert dataset_name in __supported_datasets, "Dataset not supported"
+    assert dataset_name in __supported_datasets__, "Dataset not supported"
 
     if not os.path.exists(f"data/{dataset_name}"):
         download_dataset(dataset_name)
