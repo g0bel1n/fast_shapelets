@@ -76,11 +76,14 @@ class FastShapelet:
     
     def fit(self, X, y):
         for word_len in range(1, self.max_shapelet_length + 1):
-            sax_strings = SAX(dimensionnality=word_len, cardinality=4).transform(X)
+            sax_strings, raw_data_subsequences = SAX(dimensionnality=word_len, cardinality=4).transform(X)
             collision_table = self._compute_collision_table(sax_strings, r=10)
             distinguishing_scores = self._compute_distinguishing_score(collision_table, y)
             top_k = self._find_top_k(distinguishing_scores, k=10)
             print(top_k)
             print(distinguishing_scores[top_k])
+            tscand = raw_data_subsequences[top_k]
+            print(tscand)
+            print(tscand.shape)
             #### Manque la suite
        

@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Tuple
 
 import numpy as np
 import scipy.stats as sps
@@ -37,7 +37,7 @@ class SAX(TransformerMixin):
         quantiles = np.arange(step, 1.0 - step / 2, step)
         return dist.ppf(quantiles)
 
-    def transform(self, X: np.ndarray, y=None) -> np.ndarray:
+    def transform(self, X: np.ndarray, y=None) -> Tuple[np.ndarray, np.ndarray]:
         """
         It takes a time series and returns a string representation of it
 
@@ -55,21 +55,27 @@ class SAX(TransformerMixin):
         #     raise Warning("The data is not gaussian, the SAX representation might not be accurate")
 
         if X.shape[1] % self.dimensionnality != 0:
-            paa_reps = [
-                [
-                    np.mean(el, axis=-1)
-                    for el in np.array_split(X_[:, i:], self.dimensionnality, axis=1)
-                ]
-                for i in range(X.shape[1] % self.dimensionnality)
-            ]
+            paa_reps = []
+            raw_data_subsequences = []
+            for i in range(X.shape[1] % self.dimensionnality):
+                intermediate = []
+                for el in np.array_split(X_[:, i:], self.dimensionnality, axis=1):
+                    intermediate.append(np.mean(el, axis=-1))
+                    raw_data_subsequences.append(el)
+                paa_reps.append(np.array(intermediate))
+
             paa_reps = np.array(paa_reps)
             paa_reps = np.swapaxes(paa_reps, 0, 1).T
+           
         else:
+            raw_data_subsequences = np.array_split(X_, self.dimensionnality, axis=1)
+
             paa_reps = np.mean(
-                np.array_split(X_, self.dimensionnality, axis=1), axis=-1
+               raw_data_subsequences, axis=-1
             )
             paa_reps = paa_reps.T
 
+            
         splits = self.get_splits(X_)
 
         raw_sax_words = np.apply_along_axis(
@@ -78,5 +84,6 @@ class SAX(TransformerMixin):
         sax_words = np.apply_along_axis(
             lambda x: "".join([chr(97 + i) for i in x]), -1, raw_sax_words
         )
+        raw_data_subsequences = np.array(raw_data_subsequences)
 
-        return sax_words  # sax_words of shape (n_samples, n_possible_subsequences) or (n_samples,) if n_possible_subsequences = 1
+        return sax_words, raw_data_subsequences  # sax_words of shape (n_samples, n_possible_subsequences) or (n_samples,) if n_possible_subsequences = 1
