@@ -82,6 +82,16 @@ class FastShapelet:
             splits_objects.append(Split(split,shapelet))
         return splits_objects
     
+
+    @staticmethod
+    def _format_raw_seq(raw_data_sequences,X,dim):
+        split1, split2 = np.array_split(np.hstack(raw_data_sequences), X.shape[1] % dim, axis=1)
+        raw = []
+        for i in range(X.shape[0]):
+            raw.append(split1[i,:])
+            raw.append(split2[i,:])
+        return raw
+
     def fit(self, X, y):
         for word_len in range(1, self.max_shapelet_length + 1):
             cardinality =4
@@ -91,7 +101,9 @@ class FastShapelet:
             top_k = self._find_top_k(distinguishing_scores, k=10)
             print(top_k)
             print(distinguishing_scores[top_k])
-            tscand = raw_data_subsequences[top_k]
+            print(raw_data_subsequences)
+            #raw_data_subsequences = self._format_raw_seq(raw_data_subsequences,X,word_len)
+            tscand = raw_data_subsequences.reshape(-1, raw_data_subsequences.shape[-1])[top_k] # [raw_data_subsequences[k] for k in top_k]
             print(tscand)
             print(tscand.shape)
 
@@ -99,26 +111,25 @@ class FastShapelet:
             sigma = X.std(axis=-1)
             X_ = (X - mu) / sigma[:, None]
 
-            getallsubseq = sliding_window_view(X_,cardinality,axis=1)
-
+            getallsubseq = sliding_window_view(X_,word_len,axis=1)
 
             distances = [np.apply_along_axis(
                             lambda x: dist_shapelet(x , cand), -1, getallsubseq) 
-                        for cand in tscand.flatten()] 
+                        for cand in tscand] 
 
             min_dist = np.apply_along_axis(np.min, -1, distances)
 
             max_gain , min_gap = np.inf, 0
             for k,dlist in enumerate(min_dist):
-                splits = self.define_splits([np.where(dlist > d ,1,0) for d in dlist],tscand[k])
+                splits = self._define_splits([np.where(dlist > d ,1,0) for d in dlist],tscand[k])
                 info_gain_splits = [split.info_gain(y) for split in splits]
                 gaps = [split.gap(y) for split in splits]
-                max_gain = np.where(info_gain_splits == np.max(info_gain_splits))
-                if max_gain.shape[0] > 1:
-                    max_gap = np.argmax(gaps[max_gain])
+                max_gain_cand = np.where(info_gain_splits == np.max(info_gain_splits))[0]
+                if max_gain_cand.shape[0] > 1:
+                    max_gap = np.argmax([gaps[m] for m in max_gain_cand])
                     best_split = splits[max_gap]
                 else:
-                    best_split = splits[max_gain]
+                    best_split = splits[max_gain_cand[0]]
                 if (best_split.gain > max_gain) or (best_split.gain == max_gain and best_split.gap > min_gap):
                     max_gain = best_split.gain
                     min_gap = best_split.gap
