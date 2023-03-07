@@ -1,8 +1,9 @@
 import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
 
 from ._sax import SAX
-from ._utils import apply_mask, get_random_hash
-
+from ._utils import apply_mask, get_random_hash,dist_shapelet
+from ._split import Split
 
 class FastShapelet:
     def __init__(self, n_shapelets, max_shapelet_length, n_jobs=1, verbose=0):
@@ -74,9 +75,17 @@ class FastShapelet:
         """
         return np.argsort(distinguishing_scores)[-k:]
     
+    @staticmethod
+    def _define_splits(splits,shapelet):
+        splits_objects = []
+        for split in splits :
+            splits_objects.append(Split(split,shapelet))
+        return splits_objects
+    
     def fit(self, X, y):
         for word_len in range(1, self.max_shapelet_length + 1):
-            sax_strings, raw_data_subsequences = SAX(dimensionnality=word_len, cardinality=4).transform(X)
+            cardinality =4
+            sax_strings, raw_data_subsequences = SAX(dimensionnality=word_len, cardinality=cardinality).transform(X)
             collision_table = self._compute_collision_table(sax_strings, r=10)
             distinguishing_scores = self._compute_distinguishing_score(collision_table, y)
             top_k = self._find_top_k(distinguishing_scores, k=10)
@@ -85,5 +94,35 @@ class FastShapelet:
             tscand = raw_data_subsequences[top_k]
             print(tscand)
             print(tscand.shape)
-            #### Manque la suite
+
+            mu = X.mean(axis=-1, keepdims=True)
+            sigma = X.std(axis=-1)
+            X_ = (X - mu) / sigma[:, None]
+
+            getallsubseq = sliding_window_view(X_,cardinality,axis=1)
+
+
+            distances = [np.apply_along_axis(
+                            lambda x: dist_shapelet(x , cand), -1, getallsubseq) 
+                        for cand in tscand.flatten()] 
+
+            min_dist = np.apply_along_axis(np.min, -1, distances)
+
+            max_gain , min_gap = np.inf, 0
+            for k,dlist in enumerate(min_dist):
+                splits = self.define_splits([np.where(dlist > d ,1,0) for d in dlist],tscand[k])
+                info_gain_splits = [split.info_gain(y) for split in splits]
+                gaps = [split.gap(y) for split in splits]
+                max_gain = np.where(info_gain_splits == np.max(info_gain_splits))
+                if max_gain.shape[0] > 1:
+                    max_gap = np.argmax(gaps[max_gain])
+                    best_split = splits[max_gap]
+                else:
+                    best_split = splits[max_gain]
+                if (best_split.gain > max_gain) or (best_split.gain == max_gain and best_split.gap > min_gap):
+                    max_gain = best_split.gain
+                    min_gap = best_split.gap
+                    shapelet = best_split.shapelet
+        return shapelet
+
        
