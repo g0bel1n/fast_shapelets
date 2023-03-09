@@ -122,7 +122,7 @@ class FastShapelet:
 
             min_dist = np.apply_along_axis(np.min, -1, distances)
 
-            max_gain , min_gap = np.inf, 0
+            max_gain , min_gap = -np.inf, 0
             shapelet = None
             for k,dlist in enumerate(min_dist):
                 splits = self._define_splits([np.where(dlist > d ,1,0) for d in dlist],tscand[k])
