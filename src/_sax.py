@@ -37,6 +37,25 @@ class SAX(TransformerMixin):
         quantiles = np.arange(step, 1.0 - step / 2, step)
         return dist.ppf(quantiles)
 
+    def _paa_rep(self, X: np.ndarray) -> np.ndarray:
+        """
+        It takes a subsequence and returns its PAA representation
+
+        :param subseq: the subsequence to be transformed
+        :return: The PAA representation of the subsequence
+        """
+        return np.array([np.mean(partition, axis=-1) for partition in np.array_split(X, self.dimensionnality, axis=-1)])
+
+    def _raw_sax_rep(self, subseq: np.ndarray) -> np.ndarray:
+        """
+        It takes a subsequence and returns its raw SAX representation
+
+        :param subseq: the subsequence to be transformed
+        :return: The raw SAX representation of the subsequence
+        """
+        paa_rep = self._paa_rep(subseq)
+        return np.digitize(paa_rep, self.splits)
+
     def transform(self, X: np.ndarray, y=None) -> Tuple[np.ndarray, np.ndarray]:
         """
         It takes a time series and returns a string representation of it
@@ -45,45 +64,16 @@ class SAX(TransformerMixin):
         :param y: the target variable
         :return: The sax representation of the data
         """
-        mu = X.mean(axis=-1, keepdims=True)
-
-        sigma = X.std(axis=-1)
-
-        X_ = (X - mu) / sigma[:, None]
 
         # if evaluate_gaussianness(X_) > 0.05:
         #     raise Warning("The data is not gaussian, the SAX representation might not be accurate")
 
-        if X.shape[1] % self.dimensionnality != 0:
-            paa_reps = []
-            raw_data_subsequences = []
-            for i in range(X.shape[1] % self.dimensionnality):
-                intermediate = []
-                for el in np.array_split(X_[:, i:], self.dimensionnality, axis=1):
-                    intermediate.append(np.mean(el, axis=-1))
-                    raw_data_subsequences.append(el)
-                paa_reps.append(np.array(intermediate))
+        self.splits = self.get_splits(X)
 
-            paa_reps = np.array(paa_reps)
-            paa_reps = np.swapaxes(paa_reps, 0, 1).T
-           
-        else:
-            raw_data_subsequences = np.array_split(X_, self.dimensionnality, axis=1)
+        raw_sax_words = np.apply_along_axis(self._raw_sax_rep, -1, X)
 
-            paa_reps = np.mean(
-               raw_data_subsequences, axis=-1
-            )
-            paa_reps = paa_reps.T
-
-            
-        splits = self.get_splits(X_)
-
-        raw_sax_words = np.apply_along_axis(
-            lambda x: np.digitize(x, splits), -1, paa_reps
-        )
         sax_words = np.apply_along_axis(
             lambda x: "".join([chr(97 + i) for i in x]), -1, raw_sax_words
         )
-        #raw_data_subsequences = np.array(raw_data_subsequences)
 
-        return sax_words, paa_reps  # sax_words of shape (n_samples, n_possible_subsequences) or (n_samples,) if n_possible_subsequences = 1
+        return sax_words  # sax_words of shape (n_samples, n_possible_subsequences) or (n_samples,) if n_possible_subsequences = 1

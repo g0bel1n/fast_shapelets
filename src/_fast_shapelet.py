@@ -6,9 +6,10 @@ from ._utils import apply_mask, get_random_hash,dist_shapelet
 from ._split import Split
 
 class FastShapelet:
-    def __init__(self, n_shapelets, max_shapelet_length, n_jobs=1, verbose=0):
+    def __init__(self, n_shapelets, max_shapelet_length, min_shapelet_length=100, n_jobs=1, verbose=0):
         self.n_shapelets = n_shapelets
         self.max_shapelet_length = max_shapelet_length
+        self.min_shapelet_length = min_shapelet_length
         self.n_jobs = n_jobs
         self.verbose = verbose
 
@@ -22,8 +23,10 @@ class FastShapelet:
         """
 
         objs = [np.unique(multiple_sax_string) for multiple_sax_string in sax_strings]
-        n_different_string = np.sum([len(obj) for obj in objs])
-        idx_table = np.concatenate([[i] * len(obj) for i, obj in enumerate(objs)])
+         # = [(str1_obj1, str2_obj1), (str1_obj2, str2_obj2), ...]
+        
+        n_different_string = np.sum([len(obj) for obj in objs]) 
+        idx_table = np.concatenate([[i] * len(obj) for i, obj in enumerate(objs)]) # = [0, 0, 1, 1, ...]
 
         collision_table = np.zeros((n_different_string, len(objs)), dtype=np.int32)
         objs = np.concatenate(objs, axis=0)
@@ -37,7 +40,7 @@ class FastShapelet:
                 for id_to_update in ids_to_update:
                     collision_table[id_to_update, idx_table[projected_words == unique_word]] += 1
 
-        return collision_table
+        return collision_table, objs, idx_table
     
 
     @staticmethod
@@ -90,20 +93,28 @@ class FastShapelet:
 
     def fit(self, X, y):
         cardinality =4
-        shapelets = {word_len : [] for word_len in range(2, self.max_shapelet_length + 1)}
-        for word_len in range(2, self.max_shapelet_length + 1):
-            sax_strings, raw_data_subsequences = SAX(dimensionnality=word_len, cardinality=cardinality).transform(X)
-            collision_table = self._compute_collision_table(sax_strings, r=10)
+        dimensionnality = 16
+        shapelets = {_len : [] for _len in range(self.min_shapelet_length, self.max_shapelet_length + 1)}
+        mu = X.mean(axis=-1, keepdims=True)
+        sigma = X.std(axis=-1)
+        X_ = (X - mu) / sigma[:, None]
+        sax = SAX(dimensionnality=dimensionnality, cardinality=cardinality)
+        for _len in range(self.min_shapelet_length, self.max_shapelet_length + 1):
+            raw_data_subsequences = sliding_window_view(X_,_len,axis=1)
+            sax_strings = sax.transform(raw_data_subsequences)
+            collision_table, objs, idx_table = self._compute_collision_table(sax_strings, r=10)
             distinguishing_scores = self._compute_distinguishing_score(collision_table, y)
             top_k = self._find_top_k(distinguishing_scores, k=10)
+
+            print(distinguishing_scores.shape)
+            print(raw_data_subsequences.shape)
             #raw_data_subsequences = self._format_raw_seq(raw_data_subsequences,X,word_len)
-            tscand = raw_data_subsequences.reshape(-1, raw_data_subsequences.shape[-1])[top_k] # [raw_data_subsequences[k] for k in top_k]
+            idxs = np.array([np.where(sax_strings[idx_table[_id], :]==objs[_id])[0][0] for _id in top_k])
+            tscand = raw_data_subsequences[idx_table[top_k], idxs]
 
-            mu = X.mean(axis=-1, keepdims=True)
-            sigma = X.std(axis=-1)
-            X_ = (X - mu) / sigma[:, None]
+           
 
-            getallsubseq = sliding_window_view(X_,word_len,axis=1)
+            getallsubseq = sliding_window_view(X_,_len,axis=1)
 
             distances = [np.apply_along_axis(
                             lambda x: dist_shapelet(x , cand), -1, getallsubseq) 
@@ -111,7 +122,7 @@ class FastShapelet:
 
             min_dist = np.apply_along_axis(np.min, -1, distances)
 
-            max_gain , min_gap = -np.inf, 0
+            max_gain , min_gap = np.inf, 0
             shapelet = None
             for k,dlist in enumerate(min_dist):
                 splits = self._define_splits([np.where(dlist > d ,1,0) for d in dlist],tscand[k])
@@ -131,10 +142,10 @@ class FastShapelet:
                     min_gap = best_split.gap
                     shapelet = best_split.shapelet
 
-                    shapelets[word_len].append([shapelet, max_gain, min_gap])
+                    shapelets[_len].append([shapelet, max_gain, min_gap])
             
-        for word_len in shapelets:
-            shapelets[word_len] = sorted(shapelets[word_len], key=lambda x: (x[1], x[2]), reverse=True)[:self.n_shapelets]
+        for _len in shapelets:
+            shapelets[_len] = sorted(shapelets[_len], key=lambda x: (x[1], x[2]), reverse=True)[:self.n_shapelets]
         self.shapelets = shapelets
 
 
@@ -154,8 +165,6 @@ class FastShapelet:
             )
         return np.array(X_transformed).T
     
-    
-    
-        
+
 
        
