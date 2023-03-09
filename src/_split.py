@@ -3,10 +3,11 @@ import numpy as np
 
 def get_entropy(y):
             # y binaire 0 or 1
-            p = sum(y)/y.shape[0]
-            if p==1 or p==0:
+            
+            p = [np.sum(y==cls)/y.shape[0] for cls in np.unique(y)]
+            if 1 in p or 0 in p:
                 return 0
-            return p*math.log(p) + (1-p)*math.log(1-p)
+            return np.sum([p[i]*math.log(p[i],2) for i in range(len(p))])
 
 class Split():
     def __init__(self,split_info,shapelet):
@@ -23,11 +24,11 @@ class Split():
 
         if self.nL == 0 or self.nR  ==0:
             self.gain = -np.inf
-            return self.gain
         else:
             self.gain = get_entropy(y) - (self.nL/N)*get_entropy(yL) -  (self.nR/N)*get_entropy(yR)
-            return self.gain
-    
+
+        return self.gain
+
     def gap(self,Dlist):
         if self.nL ==0 or self.nR  ==0:
             self.gap = 0
