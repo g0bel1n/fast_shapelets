@@ -84,6 +84,6 @@ class SAX(TransformerMixin):
         sax_words = np.apply_along_axis(
             lambda x: "".join([chr(97 + i) for i in x]), -1, raw_sax_words
         )
-        raw_data_subsequences = np.array(raw_data_subsequences)
+        #raw_data_subsequences = np.array(raw_data_subsequences)
 
-        return sax_words, raw_data_subsequences  # sax_words of shape (n_samples, n_possible_subsequences) or (n_samples,) if n_possible_subsequences = 1
+        return sax_words, paa_reps  # sax_words of shape (n_samples, n_possible_subsequences) or (n_samples,) if n_possible_subsequences = 1

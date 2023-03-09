@@ -1,8 +1,9 @@
 import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
 
 from ._sax import SAX
-from ._utils import apply_mask, get_random_hash
-
+from ._utils import apply_mask, get_random_hash,dist_shapelet
+from ._split import Split
 
 class FastShapelet:
     def __init__(self, n_shapelets, max_shapelet_length, n_jobs=1, verbose=0):
@@ -74,16 +75,65 @@ class FastShapelet:
         """
         return np.argsort(distinguishing_scores)[-k:]
     
+    @staticmethod
+    def _define_splits(splits,shapelet):
+        splits_objects = []
+        for split in splits :
+            splits_objects.append(Split(split,shapelet))
+        return splits_objects
+    
+
+    @staticmethod
+    def _format_raw_seq(raw_data_sequences,X,dim):
+        split1, split2 = np.array_split(np.hstack(raw_data_sequences), X.shape[1] % dim, axis=1)
+        raw = []
+        for i in range(X.shape[0]):
+            raw.append(split1[i,:])
+            raw.append(split2[i,:])
+        return raw
+
     def fit(self, X, y):
         for word_len in range(1, self.max_shapelet_length + 1):
-            sax_strings, raw_data_subsequences = SAX(dimensionnality=word_len, cardinality=4).transform(X)
+            cardinality =4
+            sax_strings, raw_data_subsequences = SAX(dimensionnality=word_len, cardinality=cardinality).transform(X)
             collision_table = self._compute_collision_table(sax_strings, r=10)
             distinguishing_scores = self._compute_distinguishing_score(collision_table, y)
             top_k = self._find_top_k(distinguishing_scores, k=10)
             print(top_k)
             print(distinguishing_scores[top_k])
-            tscand = raw_data_subsequences[top_k]
+            print(raw_data_subsequences)
+            #raw_data_subsequences = self._format_raw_seq(raw_data_subsequences,X,word_len)
+            tscand = raw_data_subsequences.reshape(-1, raw_data_subsequences.shape[-1])[top_k] # [raw_data_subsequences[k] for k in top_k]
             print(tscand)
             print(tscand.shape)
-            #### Manque la suite
+
+            mu = X.mean(axis=-1, keepdims=True)
+            sigma = X.std(axis=-1)
+            X_ = (X - mu) / sigma[:, None]
+
+            getallsubseq = sliding_window_view(X_,word_len,axis=1)
+
+            distances = [np.apply_along_axis(
+                            lambda x: dist_shapelet(x , cand), -1, getallsubseq) 
+                        for cand in tscand] 
+
+            min_dist = np.apply_along_axis(np.min, -1, distances)
+
+            max_gain , min_gap = np.inf, 0
+            for k,dlist in enumerate(min_dist):
+                splits = self._define_splits([np.where(dlist > d ,1,0) for d in dlist],tscand[k])
+                info_gain_splits = [split.info_gain(y) for split in splits]
+                gaps = [split.gap(y) for split in splits]
+                max_gain_cand = np.where(info_gain_splits == np.max(info_gain_splits))[0]
+                if max_gain_cand.shape[0] > 1:
+                    max_gap = np.argmax([gaps[m] for m in max_gain_cand])
+                    best_split = splits[max_gap]
+                else:
+                    best_split = splits[max_gain_cand[0]]
+                if (best_split.gain > max_gain) or (best_split.gain == max_gain and best_split.gap > min_gap):
+                    max_gain = best_split.gain
+                    min_gap = best_split.gap
+                    shapelet = best_split.shapelet
+        return shapelet
+
        

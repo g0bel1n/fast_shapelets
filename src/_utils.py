@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.stats as sps
+import math 
 
 
 def get_random_hash(n: int = 10, word_size: int = 10) -> np.ndarray:
@@ -33,3 +34,7 @@ def evaluate_gaussianness(X: np.ndarray, y=None) -> float:
         if p_val > max_p_val:
             max_p_val = p_val
     return max_p_val
+
+def dist_shapelet(s1,s2):
+    l = s1.shape[0]
+    return math.sqrt(np.linalg.norm(s1-s2)/l)
