@@ -5,7 +5,7 @@ import pickle
 import numpy as np
 import requests
 
-__supported_datasets__ = ["StarLightCurves"]
+__supported_datasets__ = ["StarLightCurves", "Heartbeat"]
 
 
 def download_dataset(dataset_name: str):
@@ -24,6 +24,8 @@ def download_dataset(dataset_name: str):
     print(f"Unzipping {dataset_name} dataset \n")
     os.system(f"unzip data/{dataset_name}.zip -d data/{dataset_name}/")
     os.system(f"rm data/{dataset_name}.zip")
+
+        # TODO: add arff support !!!!
 
     print(f"Converting {dataset_name} dataset to pickle \n")
     with open(f"data/{dataset_name}/{dataset_name}_TRAIN.txt", "r") as train_file:

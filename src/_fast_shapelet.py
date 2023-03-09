@@ -77,10 +77,7 @@ class FastShapelet:
     
     @staticmethod
     def _define_splits(splits,shapelet):
-        splits_objects = []
-        for split in splits :
-            splits_objects.append(Split(split,shapelet))
-        return splits_objects
+        return [Split(split,shapelet) for split in splits]
     
 
     @staticmethod
@@ -88,24 +85,19 @@ class FastShapelet:
         split1, split2 = np.array_split(np.hstack(raw_data_sequences), X.shape[1] % dim, axis=1)
         raw = []
         for i in range(X.shape[0]):
-            raw.append(split1[i,:])
-            raw.append(split2[i,:])
+            raw.extend((split1[i,:], split2[i,:]))
         return raw
 
     def fit(self, X, y):
-        for word_len in range(1, self.max_shapelet_length + 1):
-            cardinality =4
+        cardinality =4
+        shapelets = {word_len : [] for word_len in range(2, self.max_shapelet_length + 1)}
+        for word_len in range(2, self.max_shapelet_length + 1):
             sax_strings, raw_data_subsequences = SAX(dimensionnality=word_len, cardinality=cardinality).transform(X)
             collision_table = self._compute_collision_table(sax_strings, r=10)
             distinguishing_scores = self._compute_distinguishing_score(collision_table, y)
             top_k = self._find_top_k(distinguishing_scores, k=10)
-            print(top_k)
-            print(distinguishing_scores[top_k])
-            print(raw_data_subsequences)
             #raw_data_subsequences = self._format_raw_seq(raw_data_subsequences,X,word_len)
             tscand = raw_data_subsequences.reshape(-1, raw_data_subsequences.shape[-1])[top_k] # [raw_data_subsequences[k] for k in top_k]
-            print(tscand)
-            print(tscand.shape)
 
             mu = X.mean(axis=-1, keepdims=True)
             sigma = X.std(axis=-1)
@@ -119,21 +111,51 @@ class FastShapelet:
 
             min_dist = np.apply_along_axis(np.min, -1, distances)
 
-            max_gain , min_gap = np.inf, 0
+            max_gain , min_gap = -np.inf, 0
+            shapelet = None
             for k,dlist in enumerate(min_dist):
                 splits = self._define_splits([np.where(dlist > d ,1,0) for d in dlist],tscand[k])
                 info_gain_splits = [split.info_gain(y) for split in splits]
                 gaps = [split.gap(y) for split in splits]
+
                 max_gain_cand = np.where(info_gain_splits == np.max(info_gain_splits))[0]
                 if max_gain_cand.shape[0] > 1:
                     max_gap = np.argmax([gaps[m] for m in max_gain_cand])
                     best_split = splits[max_gap]
+
                 else:
                     best_split = splits[max_gain_cand[0]]
+
                 if (best_split.gain > max_gain) or (best_split.gain == max_gain and best_split.gap > min_gap):
                     max_gain = best_split.gain
                     min_gap = best_split.gap
                     shapelet = best_split.shapelet
-        return shapelet
+
+                    shapelets[word_len].append([shapelet, max_gain, min_gap])
+            
+        for word_len in shapelets:
+            shapelets[word_len] = sorted(shapelets[word_len], key=lambda x: (x[1], x[2]), reverse=True)[:self.n_shapelets]
+        self.shapelets = shapelets
+
+
+    def get_shapelets(self):
+        return self.shapelets
+    
+    def dist(self, X, shapelet):
+        subseq = sliding_window_view(X, shapelet.shape[0], axis=1)
+        return np.min(np.apply_along_axis(lambda x: dist_shapelet(x, shapelet), -1, subseq), axis=-1)
+    
+    def transform(self, X):
+        shapelets = self.get_shapelets()
+        X_transformed = []
+        for word_len in shapelets:
+            X_transformed.extend(
+                self.dist(X, shapelet[0]) for shapelet in shapelets[word_len]
+            )
+        return np.array(X_transformed).T
+    
+    
+    
+        
 
        
