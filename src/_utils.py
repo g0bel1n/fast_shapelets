@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.stats as sps
+from dtaidistance import dtw
 
 def get_random_hash(n: int = 10, word_size: int = 10) -> np.ndarray:
     """
@@ -33,6 +34,9 @@ def evaluate_gaussianness(X: np.ndarray, y=None) -> float:
             max_p_val = p_val
     return max_p_val
 
-def dist_shapelet(s1,s2):
+def norm_euclidean(s1,s2):
     l = s1.shape[0]
     return np.sqrt(np.linalg.norm(s1-s2)/l)
+
+def DTW(s1,s2):
+    return  dtw.distance_fast(np.array(s1,dtype=np.double), np.array(s2,dtype=np.double), use_pruning=True)
