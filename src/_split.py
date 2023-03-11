@@ -2,13 +2,9 @@ import math
 import numpy as np
 
 def get_entropy(y):
-            # y binaire 0 or 1
-            
-            p = [np.sum(y==cls)/y.shape[0] for cls in np.unique(y)]
-            if 1 in p or 0 in p:
-                return 0
-            return np.sum([p[i]*math.log(p[i],2) for i in range(len(p))])
-
+            p = np.array([np.sum(y==cls)/y.shape[0] for cls in np.unique(y)])
+            p = p[p>0]
+            return np.sum(p*np.log2(p))
 class Split():
     def __init__(self,split_info,shapelet):
         self.shapelet = shapelet

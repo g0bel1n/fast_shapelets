@@ -31,6 +31,7 @@ class FastShapelet:
         collision_table = np.zeros((n_different_string, len(objs)), dtype=np.int32)
         objs = np.concatenate(objs, axis=0)
 
+        #### compute collision table #### Computationnal bottleneck (20% of the time)
         random_hashes = get_random_hash(r,len(objs[0]))
         for hash_mask in random_hashes:
             projected_words = np.array([apply_mask(obj, hash_mask) for obj in objs])
@@ -106,13 +107,8 @@ class FastShapelet:
             distinguishing_scores = self._compute_distinguishing_score(collision_table, y)
             top_k = self._find_top_k(distinguishing_scores, k=10)
 
-            print(distinguishing_scores.shape)
-            print(raw_data_subsequences.shape)
-            #raw_data_subsequences = self._format_raw_seq(raw_data_subsequences,X,word_len)
             idxs = np.array([np.where(sax_strings[idx_table[_id], :]==objs[_id])[0][0] for _id in top_k])
             tscand = raw_data_subsequences[idx_table[top_k], idxs]
-
-           
 
             getallsubseq = sliding_window_view(X_,_len,axis=1)
 
@@ -121,15 +117,19 @@ class FastShapelet:
                         for cand in tscand] 
 
             min_dist = np.apply_along_axis(np.min, -1, distances)
+            # min_dist.shape = (n_samples, n_shapelets) #minimum distance of each shapelet to each sample
 
-            max_gain , min_gap = -np.inf, 0
+            max_gain , min_gap = np.inf, 0
             shapelet = None
+            assert min_dist.shape[0] == tscand.shape[0], "min_dist.shape[0] != tscand.shape[0]"
             for k,dlist in enumerate(min_dist):
                 splits = self._define_splits([np.where(dlist > d ,1,0) for d in dlist],tscand[k])
                 info_gain_splits = [split.info_gain(y) for split in splits]
                 gaps = [split.gap(y) for split in splits]
 
-                max_gain_cand = np.where(info_gain_splits == np.max(info_gain_splits))[0]
+                ### get the best split for a given shapelet
+
+                max_gain_cand = np.argmax(info_gain_splits, keepdims=True)
                 if max_gain_cand.shape[0] > 1:
                     max_gap = np.argmax([gaps[m] for m in max_gain_cand])
                     best_split = splits[max_gap]
@@ -137,7 +137,8 @@ class FastShapelet:
                 else:
                     best_split = splits[max_gain_cand[0]]
 
-                if (best_split.gain > max_gain) or (best_split.gain == max_gain and best_split.gap > min_gap):
+                #compare the current best split with the previous best split to find the best shapelet
+                if (best_split.gain < max_gain) or (best_split.gain == max_gain and best_split.gap > min_gap):
                     max_gain = best_split.gain
                     min_gap = best_split.gap
                     shapelet = best_split.shapelet
