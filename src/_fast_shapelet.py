@@ -2,7 +2,7 @@ import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 
 from ._sax import SAX
-from ._utils import apply_mask, get_random_hash,dist_shapelet
+from ._utils import apply_mask, get_random_hash,norm_euclidean,DTW
 from ._split import Split
 
 class FastShapelet:
@@ -92,7 +92,7 @@ class FastShapelet:
             raw.extend((split1[i,:], split2[i,:]))
         return raw
 
-    def fit(self, X, y):
+    def fit(self, X, y,dist_shapelet=norm_euclidean):
         cardinality =4
         dimensionnality = 16
         shapelets = {_len : [] for _len in range(self.min_shapelet_length, self.max_shapelet_length + 1)}
@@ -102,7 +102,7 @@ class FastShapelet:
         sax = SAX(dimensionnality=dimensionnality, cardinality=cardinality)
         for _len in range(self.min_shapelet_length, self.max_shapelet_length + 1):
             raw_data_subsequences = sliding_window_view(X_,_len,axis=1)
-            sax_strings = sax.transform(raw_data_subsequences)
+            sax_strings = sax.transform(raw_data_subsequences,dist_shapelet)
             collision_table, objs, idx_table = self._compute_collision_table(sax_strings, r=10)
             distinguishing_scores = self._compute_distinguishing_score(collision_table, y)
             top_k = self._find_top_k(distinguishing_scores, k=10)
@@ -153,16 +153,16 @@ class FastShapelet:
     def get_shapelets(self):
         return self.shapelets
     
-    def dist(self, X, shapelet):
+    def dist(self, X, shapelet, dist_shapelet):
         subseq = sliding_window_view(X, shapelet.shape[0], axis=1)
         return np.min(np.apply_along_axis(lambda x: dist_shapelet(x, shapelet), -1, subseq), axis=-1)
     
-    def transform(self, X):
+    def transform(self, X,dist_shapelet):
         shapelets = self.get_shapelets()
         X_transformed = []
         for word_len in shapelets:
             X_transformed.extend(
-                self.dist(X, shapelet[0]) for shapelet in shapelets[word_len]
+                self.dist(X, shapelet[0],dist_shapelet) for shapelet in shapelets[word_len]
             )
         return np.array(X_transformed).T
     
