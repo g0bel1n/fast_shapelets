@@ -72,7 +72,7 @@ def inverse_map(idx :int, idx_table :np.ndarray, map_idxs :np.ndarray, raw_data_
     obj_id  = np.where(idx_table[idx])[0][0]
     rowinrow = np.where(idx_table[:,obj_id])[0][0]
     subseq_idx = map_idxs[obj_id][idx-rowinrow]
-    return raw_data_subsequences[obj_id, subseq_idx], obj_id, idx-rowinrow
+    return raw_data_subsequences[obj_id, subseq_idx], obj_id, subseq_idx
 
 
 def scale(X):
