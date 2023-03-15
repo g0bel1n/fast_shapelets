@@ -1,7 +1,7 @@
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 
-from ._sax import SAX
+from ._sax import sax
 from ._utils import apply_mask, get_random_hash,norm_euclidean,DTW
 from ._split import Split
 
@@ -22,13 +22,21 @@ class FastShapelet:
         :return: The collision table.
         """
 
+
+
         objs = [np.unique(multiple_sax_string) for multiple_sax_string in sax_strings]
          # = [(str1_obj1, str2_obj1), (str1_obj2, str2_obj2), ...]
-        
         n_different_string = np.sum([len(obj) for obj in objs]) 
-        idx_table = np.concatenate([[i] * len(obj) for i, obj in enumerate(objs)]) # = [0, 0, 1, 1, ...]
+        # idx_table = np.concatenate([[i] * len(obj) for i, obj in enumerate(objs)]) # = [0, 0, 1, 1, ...]
+        # idx_table = np.zeros_like(collision_table)
 
         collision_table = np.zeros((n_different_string, len(objs)), dtype=np.int32)
+        idx_table = np.zeros_like(collision_table, dtype=np.bool)
+        idx = 0
+        for i, obj in enumerate(objs):
+            idx_table[idx:len(obj), i] = True
+            idx += len(obj)
+        
         objs = np.concatenate(objs, axis=0)
 
         #### compute collision table #### Computationnal bottleneck (20% of the time)
@@ -102,7 +110,7 @@ class FastShapelet:
         sax = SAX(dimensionnality=dimensionnality, cardinality=cardinality)
         for _len in range(self.min_shapelet_length, self.max_shapelet_length + 1):
             raw_data_subsequences = sliding_window_view(X_,_len,axis=1)
-            sax_strings = sax.transform(raw_data_subsequences,dist_shapelet)
+            sax_strings = sax.transform(raw_data_subsequences)
             collision_table, objs, idx_table = self._compute_collision_table(sax_strings, r=10)
             distinguishing_scores = self._compute_distinguishing_score(collision_table, y)
             top_k = self._find_top_k(distinguishing_scores, k=10)
