@@ -1,16 +1,13 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
-
 from numpy.lib.stride_tricks import sliding_window_view
-
+from rich.progress import Progress, track
 from tqdm import tqdm
 
 from ._sax import sax
 from ._split import Split
 from ._utils import DTW, get_random_hash, inverse_map, norm_euclidean, scale
-
-from rich.progress import track, Progress
 
 
 class Shapelet:
@@ -77,7 +74,7 @@ class FastShapelets:
         max_shapelet_length: int,
         min_shapelet_length: int = 100,
         n_jobs=1,
-        verbose=0,
+        verbose=1,
         cardinality: int = 10,
         r: int = 10,
         dimensionality: int = 16,
@@ -90,9 +87,8 @@ class FastShapelets:
         self.r = r
         self.dimensionality = dimensionality
 
-    @staticmethod
-    def _compute_collision_table(
-        sax_strings: np.ndarray, subtask, progress, r: int = 10
+    def _compute_collision_table(self, 
+        sax_strings: np.ndarray, subtask = None, progress = None, r: int = 10
     ) -> np.ndarray:
         """
         Computes a collision table for the given SAX strings.
@@ -100,10 +96,18 @@ class FastShapelets:
         :param sax_strings: The SAX strings to compute the collision table for.
         :return: The collision table.
         """
-        progress.update(
-                subtask,
-                description="Formatting mapping table",
-            )
+
+        assert (self.verbose == 2 and progress is not None and subtask is not None) or self.verbose != 2, "Progress bar is not initialized"
+
+        if self.verbose == 2 :
+            progress.update(
+                    subtask,
+                    description="Formatting mapping table",
+                )
+        elif self.verbose == 1:
+            print("Computing collision table...")
+
+        
         objs = []
         map_idxs = []
         for multiple_sax_string in sax_strings:
@@ -132,11 +136,12 @@ class FastShapelets:
 
         random_hashes = jnp.array(get_random_hash(objs.shape[1], r)).T
 
-        progress.update(
-                subtask,
-                advance=1,
-                description=f"Computing collision table 0/{r}",
-            )
+        if self.verbose == 2:
+            progress.update(
+                    subtask,
+                    advance=1,
+                    description=f"Computing collision table 0/{r}",
+                )
 
         for k, hash_mask in enumerate(random_hashes):
             projected_words = objs[:, hash_mask]
@@ -156,12 +161,12 @@ class FastShapelets:
                 collision_table[bool_mask, :] += c[i]
 
                 # update rich progress bar
-
-            progress.update(
-                subtask,
-                advance=1,
-                description=f"Computing collision table {k+1}/{r}",
-            )
+            if self.verbose == 2:
+                progress.update(
+                    subtask,
+                    advance=1,
+                    description=f"Computing collision table {k+1}/{r}",
+                )
 
         return collision_table, map_idxs, idx_table
 
@@ -227,26 +232,41 @@ class FastShapelets:
         self.dist_shapelet = dist_shapelet
 
         with Progress() as progress:
-            task = progress.add_task(
-                "[green]Computing all shapelets",
-                total=self.max_shapelet_length - self.min_shapelet_length + 1,
-            )
+            if self.verbose == 2:
+                task = progress.add_task(
+                    "[green]Computing all shapelets",
+                    total=self.max_shapelet_length - self.min_shapelet_length + 1,
+                )
+
+            elif self.verbose == 1:
+                print("Computing all shapelets...")
 
             for _len in range(self.min_shapelet_length, self.max_shapelet_length + 1):
-                subtask = progress.add_task("Computing SAX", total=15)
+
+                if self.verbose == 2:
+                    subtask = progress.add_task("Computing SAX", total=15)
+                else :
+                    subtask = None
+
+
+                if self.verbose == 1:
+                    print(f"Computing shapelet { _len - self.min_shapelet_length + 1 }/{self.max_shapelet_length - self.min_shapelet_length + 1}")
 
                 tscand = self.get_candidates_shapelets(y, X_, _len, subtask, progress)
-                progress.update(subtask, description="Computing distances")
+                if self.verbose == 2:
+                    progress.update(subtask, description="Computing distances")
                 min_dist = compute_all_distances_to_shapelet(
                     X_, jnp.array([a.value for a in tscand]), dist_shapelet
                 )
-                progress.update(subtask, advance=1, description="Finding best shapelet")
+                if self.verbose == 2:
+                    progress.update(subtask, advance=1, description="Finding best shapelet")
 
                 shapelets[_len] = self.get_best_shapelet(y, tscand, min_dist)
 
-                progress.update(subtask, advance=1, description="Done")
-                progress.remove_task(subtask)
-                progress.update(task, advance=1)
+                if self.verbose == 2:
+                    progress.update(subtask, advance=1, description="Done")
+                    progress.remove_task(subtask)
+                    progress.update(task, advance=1)
 
         self.shapelets = shapelets
 
@@ -294,7 +314,8 @@ class FastShapelets:
             cardinality=self.cardinality,
             dimensionality=self.dimensionality,
         )
-        progress.update(subtask, advance=1)
+        if self.verbose == 2:
+            progress.update(subtask, advance=1)
         collision_table, map_idxs, idx_table = self._compute_collision_table(
             sax_strings, r=self.r, subtask=subtask, progress=progress
         )
