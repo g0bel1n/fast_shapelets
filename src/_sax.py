@@ -13,18 +13,18 @@ from ._utils import get_splits
 
 
 @partial(jit, static_argnums=1)
-def _paa_rep(X: jax.Array, dimensionnality: int = 16) -> jax.Array:
+def _paa_rep(X: jax.Array, dimensionality: int = 16) -> jax.Array:
     """
     It takes a subsequence and returns its PAA representation
 
     :param subseq: the subsequence to be transformed
     :return: The PAA representation of the subsequence
     """
-    return jnp.array([jnp.mean(partition, axis=-1) for partition in jnp.array_split(X, dimensionnality, axis=-1)])
+    return jnp.array([jnp.mean(partition, axis=-1) for partition in jnp.array_split(X, dimensionality, axis=-1)])
 
 
 @partial(jit, static_argnums=(1,2))
-def sax(X: jax.Array, dimensionnality: int = 16, word_len : int = 10) -> jax.Array:
+def sax(X: jax.Array, dimensionality: int = 16, cardinality : int = 10) -> jax.Array:
     """
     It takes a time series and returns a string representation of it
 
@@ -36,7 +36,7 @@ def sax(X: jax.Array, dimensionnality: int = 16, word_len : int = 10) -> jax.Arr
     # if evaluate_gaussianness(X_) > 0.05:
     #     raise Warning("The data is not gaussian, the SAX representation might not be accurate")
 
-    splits = get_splits(word_len)
+    splits = get_splits(cardinality)
 
     @jit
     def _raw_sax_rep(subseq: jax.Array) -> jax.Array:
@@ -46,7 +46,7 @@ def sax(X: jax.Array, dimensionnality: int = 16, word_len : int = 10) -> jax.Arr
         :param subseq: the subsequence to be transformed
         :return: The raw SAX representation of the subsequence
         """
-        paa_rep = _paa_rep(subseq, dimensionnality)
+        paa_rep = _paa_rep(subseq, dimensionality)
         return jnp.digitize(paa_rep, splits)
     
     return jnp.apply_along_axis(_raw_sax_rep, -1, X)
