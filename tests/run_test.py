@@ -26,7 +26,7 @@ if __name__ == "__main__":
     y = y_train[:500]
 
     # %%
-    fs = FastShapelets(min_shapelet_length=200, max_shapelet_length=201, cardinality=4, dimensionality=16, r=10)
+    fs = FastShapelets(min_shapelet_length=200, max_shapelet_length=200, cardinality=4, dimensionality=16, r=10)
 
     # %%
     fs.fit(X, y)

@@ -343,4 +343,5 @@ class FastShapelets:
         shapelets = np.array(
             [el.value for el in self.get_shapelets().values()], dtype=object
         )
-        return compute_all_distances_to_shapelet(X, shapelets, self.dist_shapelet)
+
+        return compute_all_distances_to_shapelet(X, shapelets.astype(float), self.dist_shapelet)
