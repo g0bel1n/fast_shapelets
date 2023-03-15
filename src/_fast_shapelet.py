@@ -10,6 +10,8 @@ from ._sax import sax
 from ._split import Split
 from ._utils import DTW, get_random_hash, inverse_map, norm_euclidean, scale
 
+from rich.progress import track, Progress
+
 
 class Shapelet:
     def __init__(
@@ -89,14 +91,19 @@ class FastShapelets:
         self.dimensionality = dimensionality
 
     @staticmethod
-    def _compute_collision_table(sax_strings: np.ndarray, r: int = 10) -> np.ndarray:
+    def _compute_collision_table(
+        sax_strings: np.ndarray, subtask, progress, r: int = 10
+    ) -> np.ndarray:
         """
         Computes a collision table for the given SAX strings.
 
         :param sax_strings: The SAX strings to compute the collision table for.
         :return: The collision table.
         """
-
+        progress.update(
+                subtask,
+                description="Formatting mapping table",
+            )
         objs = []
         map_idxs = []
         for multiple_sax_string in sax_strings:
@@ -109,11 +116,9 @@ class FastShapelets:
 
             # = [(str1_obj1, str2_obj1), (str1_obj2, str2_obj2), ...]
         n_different_string = sum(obj.shape[0] for obj in objs)
-        # idx_table = jnp.concatenate([jnp.array([i] * len(obj)) for i, obj in enumerate(objs)]) # = [0, 0, 1, 1, ...]
-        # idx_table = np.zeros_like(collision_table)
+
 
         collision_table = np.zeros((n_different_string, len(objs)), dtype=np.int32)
-        # idx_table = jnp.concatenate([jnp.array([[0]*max(0, i-1) + [1] + [0]*(len(objs)-i)] * len(obj)) for i, obj in enumerate(objs)], axis=0)
         idx_table = np.zeros_like(collision_table)
         idx = 0
 
@@ -127,8 +132,13 @@ class FastShapelets:
 
         random_hashes = jnp.array(get_random_hash(objs.shape[1], r)).T
 
-        print("here")
-        for hash_mask in random_hashes:
+        progress.update(
+                subtask,
+                advance=1,
+                description=f"Computing collision table 0/{r}",
+            )
+
+        for k, hash_mask in enumerate(random_hashes):
             projected_words = objs[:, hash_mask]
             u, indices = jnp.unique(projected_words, axis=0, return_inverse=True)
             # interm = np.zeros((u.shape[0], len(objs)))
@@ -144,6 +154,14 @@ class FastShapelets:
             for i in range(c.shape[0]):
                 bool_mask = indices == i
                 collision_table[bool_mask, :] += c[i]
+
+                # update rich progress bar
+
+            progress.update(
+                subtask,
+                advance=1,
+                description=f"Computing collision table {k+1}/{r}",
+            )
 
         return collision_table, map_idxs, idx_table
 
@@ -206,17 +224,29 @@ class FastShapelets:
         dist_shapelet = jax.jit(dist_shapelet)
         dist_shapelet = jax.vmap(dist_shapelet, in_axes=(0, None))
 
-        for _len in range(self.min_shapelet_length, self.max_shapelet_length + 1):
-            raw_data_subsequences, tscand = self.get_candidates_shapelets(y, X_, _len)
-            print("computed candidates shapelets")
+        self.dist_shapelet = dist_shapelet
 
-            min_dist = compute_all_distances_to_shapelet(
-                X_, jnp.array([a.value for a in tscand]), dist_shapelet
+        with Progress() as progress:
+            task = progress.add_task(
+                "[green]Computing all shapelets",
+                total=self.max_shapelet_length - self.min_shapelet_length + 1,
             )
-            print("computed distances")
-            # min_dist.shape = (n_samples, n_shapelets) #minimum distance of each shapelet to each sample
-            shapelets[_len] = self.get_best_shapelet(y, tscand, min_dist)
-            print("computed best shapelets")
+
+            for _len in range(self.min_shapelet_length, self.max_shapelet_length + 1):
+                subtask = progress.add_task("Computing SAX", total=15)
+
+                tscand = self.get_candidates_shapelets(y, X_, _len, subtask, progress)
+                progress.update(subtask, description="Computing distances")
+                min_dist = compute_all_distances_to_shapelet(
+                    X_, jnp.array([a.value for a in tscand]), dist_shapelet
+                )
+                progress.update(subtask, advance=1, description="Finding best shapelet")
+
+                shapelets[_len] = self.get_best_shapelet(y, tscand, min_dist)
+
+                progress.update(subtask, advance=1, description="Done")
+                progress.remove_task(subtask)
+                progress.update(task, advance=1)
 
         self.shapelets = shapelets
 
@@ -257,20 +287,21 @@ class FastShapelets:
 
         return shapelet
 
-    def get_candidates_shapelets(self, y, X_, _len):
+    def get_candidates_shapelets(self, y, X_, _len, subtask, progress):
         raw_data_subsequences = sliding_window_view(X_, _len, axis=1)
         sax_strings = sax(
             raw_data_subsequences,
             cardinality=self.cardinality,
             dimensionality=self.dimensionality,
         )
+        progress.update(subtask, advance=1)
         collision_table, map_idxs, idx_table = self._compute_collision_table(
-            sax_strings, r=self.r
+            sax_strings, r=self.r, subtask=subtask, progress=progress
         )
         distinguishing_scores = self._compute_distinguishing_score(collision_table, y)
         top_k = self._find_top_k(distinguishing_scores, k=10)
 
-        tscand = np.array(
+        return np.array(
             [
                 Shapelet(
                     *inverse_map(
@@ -283,11 +314,12 @@ class FastShapelets:
                 for _id in top_k
             ]
         )
-        return raw_data_subsequences, tscand
 
     def get_shapelets(self):
         return self.shapelets
 
-    def transform(self, X, dist_shapelet):
-        shapelets = np.array([el.value for el in self.get_shapelets()])
-        return compute_all_distances_to_shapelet(X, shapelets, dist_shapelet)
+    def transform(self, X):
+        shapelets = np.array(
+            [el.value for el in self.get_shapelets().values()], dtype=object
+        )
+        return compute_all_distances_to_shapelet(X, shapelets, self.dist_shapelet)

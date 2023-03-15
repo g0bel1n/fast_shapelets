@@ -1,5 +1,9 @@
+dtaidistance==2.3.10
+jax==0.4.4
+matplotlib==3.5.2
 numpy==1.23.1
 requests==2.27.1
-scikit_learn==1.2.1
+rich==13.3.2
+scikit_learn==1.2.2
 scipy==1.9.0
-dtaidistance
+tqdm==4.64.0
