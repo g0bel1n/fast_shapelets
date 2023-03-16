@@ -43,7 +43,7 @@ def evaluate_gaussianness(X: np.ndarray, y=None) -> float:
 def DTW(s1,s2):
     return  dtw.distance_fast(np.array(s1,dtype=np.double), np.array(s2,dtype=np.double), use_pruning=True)
 
-DTW = jax.vmap(DTW, in_axes=(0, None))
+#DTW = jax.vmap(DTW, in_axes=(0, None))
 
 def get_splits(n_splits : int) -> np.ndarray:
     """
