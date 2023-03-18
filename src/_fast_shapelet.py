@@ -16,8 +16,10 @@ from ._utils import (
     norm_euclidean,
     scale,
     compute_all_distances_to_shapelet,
-    DTW_distance
+    DTW_distance,
 )
+
+from multiprocessing import Pool
 
 
 class FastShapelets:
@@ -29,6 +31,7 @@ class FastShapelets:
         cardinality: int = 10,
         r: int = 10,
         dimensionality: int = 16,
+        n_jobs=2,
     ):
         self.max_shapelet_length = max_shapelet_length
         self.min_shapelet_length = min_shapelet_length
@@ -36,6 +39,7 @@ class FastShapelets:
         self.cardinality = cardinality
         self.r = r
         self.dimensionality = dimensionality
+        self.n_jobs = n_jobs
 
     def _compute_collision_table(
         self, sax_strings: np.ndarray, subtask=None, progress=None, r: int = 10
@@ -64,8 +68,8 @@ class FastShapelets:
         )
 
         n_different_string = sum(obj.shape[0] for obj in objs)
-
-        collision_table = np.zeros((n_different_string, len(objs)), dtype=np.int32)
+        n_obj = len(objs)
+        # collision_table = np.zeros((n_different_string, len(objs)), dtype=np.int32)
         id2obj_map = self.id2obj_map(objs, n_different_string)
 
         objs = jnp.concatenate(objs, axis=0)
@@ -81,26 +85,39 @@ class FastShapelets:
 
         ### This is the part that is slow
         ### it updates the collision table after applying random hashes
-        for k, hash_mask in enumerate(random_hashes):
-            projected_words = objs[:, hash_mask]
-            u, indices = jnp.unique(projected_words, axis=0, return_inverse=True)
-            c = (
-                jnp.zeros((u.shape[0], len(objs)))
-                .at[indices, np.arange(len(indices))]
-                .set(1)
-                @ id2obj_map
-            )
-            for i in range(c.shape[0]):
-                bool_mask = indices == i
-                collision_table[bool_mask, :] += c[i]
 
-                # update rich progress bar
-            if self.verbose == 2:
-                progress.update(
-                    subtask,
-                    advance=1,
-                    description=f"Computing collision table {k+1}/{r}",
-                )
+        pool = Pool(processes=self.n_jobs)  # use 4 worker processes
+
+        collision_table = pool.map(
+            compute_collision_table,
+            (
+                (k, n_different_string, random_hashes.copy(), objs.copy(), id2obj_map.copy(), n_obj)
+                for k in range(r)
+            ),
+        )
+
+        collision_table = jnp.array(np.sum(collision_table, axis=0))
+
+        # for k, hash_mask in enumerate(random_hashes):
+        #     projected_words = objs[:, hash_mask]
+        #     u, indices = jnp.unique(projected_words, axis=0, return_inverse=True)
+        #     c = (
+        #         jnp.zeros((u.shape[0], len(objs)))
+        #         .at[indices, np.arange(len(indices))]
+        #         .set(1)
+        #         @ id2obj_map
+        #     )
+        #     for i in range(c.shape[0]):
+        #         bool_mask = indices == i
+        #         collision_table[bool_mask, :] += c[i]
+
+        #         # update rich progress bar
+        #     if self.verbose == 2:
+        #         progress.update(
+        #             subtask,
+        #             advance=1,
+        #             description=f"Computing collision table {k+1}/{r}",
+        #         )
 
         return collision_table, original_2_unique_concat_array_map, id2obj_map
 
@@ -181,8 +198,8 @@ class FastShapelets:
 
         X_ = scale(X)
 
-        #dist_shapelet = jax.jit(dist_shapelet)
-        #dist_shapelet = jax.vmap(dist_shapelet, in_axes=(0, None))
+        # dist_shapelet = jax.jit(dist_shapelet)
+        # dist_shapelet = jax.vmap(dist_shapelet, in_axes=(0, None))
 
         self.dist_shapelet = dist_shapelet
 
@@ -213,7 +230,7 @@ class FastShapelets:
                     progress.update(subtask, description="Computing distances")
 
                 min_dist = compute_all_distances_to_shapelet(
-                    np.array(X_), np.array([a.value for a in tscand]), dist_shapelet
+                    X_, np.array([a.value for a in tscand]), dist_shapelet
                 )
 
                 if self.verbose == 2:
@@ -308,9 +325,36 @@ class FastShapelets:
 
     def transform(self, X):
         shapelets = np.array(
-            [el.value for el in self.get_shapelets().values()], dtype=object
+            [el.value for el in self.get_shapelets().values()], dtype=np.float16
         )
 
         return compute_all_distances_to_shapelet(
             scale(X), shapelets, self.dist_shapelet
         )
+
+
+def compute_collision_table(args):
+    k, n_different_string, random_hashes, objs, id2obj_map, n_obj = args
+    collision_table = np.zeros((n_different_string, n_obj), dtype=np.int16)
+    hash_mask = random_hashes[k, :]
+    projected_words = objs[:, hash_mask]
+    u, indices = jnp.unique(projected_words, axis=0, return_inverse=True)
+
+    c = (
+        jnp.zeros((u.shape[0], len(objs))).at[indices, np.arange(len(indices))].set(1)
+        @ id2obj_map
+    )
+
+    for i in range(c.shape[0]):
+        bool_mask = indices == i
+        collision_table[bool_mask, :] += c[i]
+
+    # update rich progress bar
+    # if self.verbose == 2:
+    #     progress.update(
+    #         subtask,
+    #         advance=1,
+    #         description=f"Computing collision table {k+1}/{r}",
+    #     )
+
+    return collision_table

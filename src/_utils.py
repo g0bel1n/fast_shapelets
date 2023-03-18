@@ -87,7 +87,7 @@ def inverse_map(
 def scale(X):
     mu = X.mean(axis=-1, keepdims=True)
     sigma = X.std(axis=-1)
-    return (X - mu) / sigma[:, None]
+    return ((X - mu) / sigma[:, None]).astype(np.float16)
 
 
 def sliding_window_view_jax(
