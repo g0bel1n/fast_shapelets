@@ -30,4 +30,6 @@ if __name__ == "__main__":
 
     # %%
     fs.fit(X, y, dist_shapelet = DTW_distance)
+
+    fs.transform(X_train[:10])
 # %%

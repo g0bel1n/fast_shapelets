@@ -7,7 +7,6 @@ import jax
 from numpy.lib.stride_tricks import sliding_window_view
 
 
-
 def get_random_hash(n: int = 10, word_size: int = 10) -> np.ndarray:
     """
     > It generates a random hash of length n
@@ -17,7 +16,8 @@ def get_random_hash(n: int = 10, word_size: int = 10) -> np.ndarray:
     :return: The random hash
     :rtype: np.array(dtype=np.int32)
     """
-    return np.random.binomial(n=1, p=.7, size=(n, word_size)).astype(bool)
+    return np.random.binomial(n=1, p=0.7, size=(n, word_size)).astype(bool)
+
 
 def apply_mask(word: str, mask: np.ndarray) -> str:
     """
@@ -30,7 +30,10 @@ def apply_mask(word: str, mask: np.ndarray) -> str:
     :return: The masked word
     :rtype: str
     """
-    return "".join([letter for letter, mask in zip(word, mask) if mask]) #or ''.join(np.array(list(sax_string))[mask])
+    return "".join(
+        [letter for letter, mask in zip(word, mask) if mask]
+    )  # or ''.join(np.array(list(sax_string))[mask])
+
 
 def evaluate_gaussianness(X: np.ndarray, y=None) -> float:
     max_p_val = 0
@@ -40,12 +43,15 @@ def evaluate_gaussianness(X: np.ndarray, y=None) -> float:
             max_p_val = p_val
     return max_p_val
 
-def _DTW(s1,s2):
-    return  dtw.distance_fast(s1, s2, use_pruning=True)
 
-#DTW = jax.vmap(DTW, in_axes=(0, None))
+def _DTW(s1, s2):
+    return dtw.distance_fast(s1, s2, use_pruning=True)
 
-def get_splits(n_splits : int) -> np.ndarray:
+
+# DTW = jax.vmap(DTW, in_axes=(0, None))
+
+
+def get_splits(n_splits: int) -> np.ndarray:
     """
     It takes a column of data, calculates the mean and standard deviation, then creates a normal
     distribution with those parameters. It then calculates the probability density function (PDF) of
@@ -65,10 +71,16 @@ def get_splits(n_splits : int) -> np.ndarray:
     quantiles = np.arange(step, 1.0 - step / 2, step)
     return dist.ppf(quantiles)
 
-def inverse_map(idx :int, id2obj_map :np.ndarray, original_2_unique_concat_array_map :np.ndarray, raw_data_subsequences :np.ndarray):
-    obj_id  = np.where(id2obj_map[idx])[0][0]
-    rowinrow = np.where(id2obj_map[:,obj_id])[0][0]
-    subseq_idx = original_2_unique_concat_array_map[obj_id][idx-rowinrow]
+
+def inverse_map(
+    idx: int,
+    id2obj_map: np.ndarray,
+    original_2_unique_concat_array_map: np.ndarray,
+    raw_data_subsequences: np.ndarray,
+):
+    obj_id = np.where(id2obj_map[idx])[0][0]
+    rowinrow = np.where(id2obj_map[:, obj_id])[0][0]
+    subseq_idx = original_2_unique_concat_array_map[obj_id][idx - rowinrow]
     return raw_data_subsequences[obj_id, subseq_idx], obj_id, subseq_idx
 
 
@@ -76,6 +88,7 @@ def scale(X):
     mu = X.mean(axis=-1, keepdims=True)
     sigma = X.std(axis=-1)
     return (X - mu) / sigma[:, None]
+
 
 def sliding_window_view_jax(
     x: jax.Array, window_shape: int, axis: int = -1
@@ -93,7 +106,7 @@ def sliding_window_view_jax(
 
 
 def min_dist_to_shapelet(X, shapelet, dist_shapelet):
-    #print(type(X), type(shapelet))
+    # print(type(X), type(shapelet))
     return jnp.min(
         dist_shapelet(sliding_window_view(X, len(shapelet), axis=1), shapelet),
         axis=-1,
@@ -121,5 +134,9 @@ norm_euclidean = jax.vmap(norm_euclidean, in_axes=(0, None))
 
 
 def DTW_distance(sliding_window_view, shapelet):
-    a, b = np.array(sliding_window_view, dtype=np.double), np.array(shapelet, dtype=np.double)
-    return np.apply_along_axis(lambda x: dtw.distance_fast(x, b, use_pruning=True), -1,a)
+    a, b = np.array(sliding_window_view, dtype=np.double), np.array(
+        shapelet, dtype=np.double
+    )
+    return np.apply_along_axis(
+        lambda x: dtw.distance_fast(x, b, use_pruning=True), -1, a
+    )
