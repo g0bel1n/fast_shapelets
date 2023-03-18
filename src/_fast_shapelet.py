@@ -312,5 +312,5 @@ class FastShapelets:
         )
 
         return compute_all_distances_to_shapelet(
-            scale(X), shapelets, self.dist_shapelet
+            X, shapelets, self.dist_shapelet
         )
