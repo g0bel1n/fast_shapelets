@@ -181,8 +181,8 @@ class FastShapelets:
 
         X_ = scale(X)
 
-        dist_shapelet = jax.jit(dist_shapelet)
-        dist_shapelet = jax.vmap(dist_shapelet, in_axes=(0, None))
+        #dist_shapelet = jax.jit(dist_shapelet)
+        #dist_shapelet = jax.vmap(dist_shapelet, in_axes=(0, None))
 
         self.dist_shapelet = dist_shapelet
 
@@ -213,7 +213,7 @@ class FastShapelets:
                     progress.update(subtask, description="Computing distances")
 
                 min_dist = compute_all_distances_to_shapelet(
-                    X_, jnp.array([a.value for a in tscand]), dist_shapelet
+                    np.array(X_), np.array([a.value for a in tscand]), dist_shapelet
                 )
 
                 if self.verbose == 2:
