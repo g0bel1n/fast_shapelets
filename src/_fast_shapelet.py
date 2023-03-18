@@ -16,7 +16,7 @@ from ._utils import (
     norm_euclidean,
     scale,
     compute_all_distances_to_shapelet,
-    DTW_distance
+    DTW_distance,
 )
 
 
@@ -181,8 +181,8 @@ class FastShapelets:
 
         X_ = scale(X)
 
-        #dist_shapelet = jax.jit(dist_shapelet)
-        #dist_shapelet = jax.vmap(dist_shapelet, in_axes=(0, None))
+        # dist_shapelet = jax.jit(dist_shapelet)
+        # dist_shapelet = jax.vmap(dist_shapelet, in_axes=(0, None))
 
         self.dist_shapelet = dist_shapelet
 
@@ -308,7 +308,7 @@ class FastShapelets:
 
     def transform(self, X):
         shapelets = np.array(
-            [el.value for el in self.get_shapelets().values()], dtype=object
+            [el.value for el in self.get_shapelets().values()], dtype=np.float16
         )
 
         return compute_all_distances_to_shapelet(
