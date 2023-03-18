@@ -16,6 +16,7 @@ from ._utils import (
     norm_euclidean,
     scale,
     compute_all_distances_to_shapelet,
+    DTW_distance
 )
 
 
