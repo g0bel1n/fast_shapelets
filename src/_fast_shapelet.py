@@ -11,7 +11,6 @@ from ._sax import sax
 from ._shapelet import Shapelet
 from ._split import Split
 from ._utils import (
-    DTW,
     get_random_hash,
     inverse_map,
     norm_euclidean,
