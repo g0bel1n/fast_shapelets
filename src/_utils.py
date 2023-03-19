@@ -114,7 +114,7 @@ def min_dist_to_shapelet(X, shapelet, dist_shapelet):
 
 
 def compute_all_distances_to_shapelet(X, shapelets, dist_shapelet):
-    distances_array = np.zeros((X.shape[0], shapelets.shape[0]))
+    distances_array = np.zeros((X.shape[0], len(shapelets)))
     for i, shapelet in enumerate(shapelets):
         distances_array[:, i] = min_dist_to_shapelet(X, shapelet, dist_shapelet)
     return distances_array

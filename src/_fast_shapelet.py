@@ -1,4 +1,4 @@
-from typing import Tuple, List, TypeVar
+from typing import Tuple, List, TypeVar, Optional
 
 import jax
 import jax.numpy as jnp
@@ -25,21 +25,30 @@ from multiprocessing import Pool
 class FastShapelets:
     def __init__(
         self,
-        min_shapelet_length: int = 100,
-        max_shapelet_length: int = 100,
-        verbose=1,
+        min_shapelet_length: Optional[int] = None,
+        max_shapelet_length: Optional[int] = None,
+        shapelet_lengths : Optional[List[int]] = None,
+        verbose: Optional[None] = 1,
         cardinality: int = 10,
         r: int = 10,
         dimensionality: int = 16,
         n_jobs=2,
     ):
-        self.max_shapelet_length = max_shapelet_length
-        self.min_shapelet_length = min_shapelet_length
+
         self.verbose = verbose
         self.cardinality = cardinality
         self.r = r
         self.dimensionality = dimensionality
         self.n_jobs = n_jobs
+        
+        self.min_shapelet_length = min_shapelet_length
+        self.max_shapelet_length = max_shapelet_length
+        
+        
+        
+        self.shapelet_lengths = shapelet_lengths
+            
+        self.shapelets = None
 
     def _compute_collision_table(
         self, sax_strings: np.ndarray, subtask=None, progress=None, r: int = 10
@@ -59,6 +68,7 @@ class FastShapelets:
             progress.update(
                 subtask,
                 description="Formatting mapping table",
+                advance=1
             )
         elif self.verbose == 1:
             print("Computing collision table...")
@@ -69,7 +79,7 @@ class FastShapelets:
 
         n_different_string = sum(obj.shape[0] for obj in objs)
         n_obj = len(objs)
-        # collision_table = np.zeros((n_different_string, len(objs)), dtype=np.int32)
+
         id2obj_map = self.id2obj_map(objs, n_different_string)
 
         objs = jnp.concatenate(objs, axis=0)
@@ -80,44 +90,27 @@ class FastShapelets:
             progress.update(
                 subtask,
                 advance=1,
-                description=f"Computing collision table 0/{r}",
+                description=f"Computing collision table ...",
             )
 
         ### This is the part that is slow
         ### it updates the collision table after applying random hashes
 
-        pool = Pool(processes=self.n_jobs)  # use 4 worker processes
+        if self.n_jobs>1:
+            pool = Pool(processes=self.n_jobs)  # use 4 worker processes
 
-        collision_table = pool.map(
-            compute_collision_table,
-            (
-                (k, n_different_string, random_hashes.copy(), objs.copy(), id2obj_map.copy(), n_obj)
-                for k in range(r)
-            ),
-        )
+            collision_table = pool.map(
+                compute_collision_table,
+                (
+                    (k, n_different_string, random_hashes.copy(), objs.copy(), id2obj_map.copy(), n_obj)
+                    for k in range(r)
+                ),
+            )
+        else :
+            collision_table = [compute_collision_table((k, n_different_string, random_hashes, objs, id2obj_map, n_obj))
+                    for k in range(r)]
 
         collision_table = jnp.array(np.sum(collision_table, axis=0))
-
-        # for k, hash_mask in enumerate(random_hashes):
-        #     projected_words = objs[:, hash_mask]
-        #     u, indices = jnp.unique(projected_words, axis=0, return_inverse=True)
-        #     c = (
-        #         jnp.zeros((u.shape[0], len(objs)))
-        #         .at[indices, np.arange(len(indices))]
-        #         .set(1)
-        #         @ id2obj_map
-        #     )
-        #     for i in range(c.shape[0]):
-        #         bool_mask = indices == i
-        #         collision_table[bool_mask, :] += c[i]
-
-        #         # update rich progress bar
-        #     if self.verbose == 2:
-        #         progress.update(
-        #             subtask,
-        #             advance=1,
-        #             description=f"Computing collision table {k+1}/{r}",
-        #         )
 
         return collision_table, original_2_unique_concat_array_map, id2obj_map
 
@@ -193,59 +186,72 @@ class FastShapelets:
     def _define_splits(splits, shapelet):
         return [Split(split, shapelet) for split in splits]
 
-    def fit(self, X, y, dist_shapelet=norm_euclidean):
-        shapelets = {}
-
-        X_ = scale(X)
-
-        # dist_shapelet = jax.jit(dist_shapelet)
-        # dist_shapelet = jax.vmap(dist_shapelet, in_axes=(0, None))
-
+    def fit(self, X : Optional[np.ndarray] = None, y: Optional[np.ndarray] = None, dist_shapelet=norm_euclidean, shapelets : Optional[dict] = None):
         self.dist_shapelet = dist_shapelet
+        
+        assert (shapelets is not None) or ((X is not None) and (y is not None)), 'Please provide either (X,y) or precomputed shapelets'
+        
+        if shapelets is None :
+            if self.shapelet_lengths is None :
+                assert not (self.min_shapelet_length is None or self.max_shapelet_length is None), 'Please provide either shapelet_lengths or (min_shapelet_length and   max_shapelet_length)'
+                self.shapelet_lengths = list(range(self.min_shapelet_length, self.max_shapelet_length))
+                
+            shapelets = {}
 
-        with Progress() as progress:
-            if self.verbose == 2:
-                task = progress.add_task(
-                    "[green]Computing all shapelets",
-                    total=self.max_shapelet_length - self.min_shapelet_length + 1,
-                )
+            X_ = scale(X)
 
-            elif self.verbose == 1:
-                print("Computing all shapelets...")
+            # dist_shapelet = jax.jit(dist_shapelet)
+            # dist_shapelet = jax.vmap(dist_shapelet, in_axes=(0, None))
 
-            for _len in range(self.min_shapelet_length, self.max_shapelet_length + 1):
+
+
+            with Progress() as progress:
                 if self.verbose == 2:
-                    subtask = progress.add_task("Computing SAX", total=15)
-                else:
-                    subtask = None
-
-                if self.verbose == 1:
-                    print(
-                        f"Computing shapelet { _len - self.min_shapelet_length + 1 }/{self.max_shapelet_length - self.min_shapelet_length + 1}"
+                    task = progress.add_task(
+                        f"[green]Compute for shapelet len {self.shapelet_lengths[0]} ",
+                        total=len(self.shapelet_lengths),
                     )
 
-                tscand = self.get_candidates_shapelets(y, X_, _len, subtask, progress)
+                elif self.verbose == 1:
+                    print("Computing all shapelets...")
 
-                if self.verbose == 2:
-                    progress.update(subtask, description="Computing distances")
+                for k, _len in enumerate(self.shapelet_lengths):
+                    if self.verbose == 2:
+                        progress.update(task, description=f"Computing shapelet { k+1 }/{len(self.shapelet_lengths)}", advance=1)
 
-                min_dist = compute_all_distances_to_shapelet(
-                    X_, np.array([a.value for a in tscand]), dist_shapelet
-                )
+                        subtask = progress.add_task("Computing SAX", total=6)
+                    else:
+                        subtask = None
 
-                if self.verbose == 2:
-                    progress.update(
-                        subtask, advance=1, description="Finding best shapelet"
+                    if self.verbose == 1:
+                        print(
+                            f"Computing shapelet { k+1 }/{len(self.shapelet_lengths)}"
+                        )
+
+                    tscand = self.get_candidates_shapelets(y, X_, _len, subtask, progress)
+
+                    if self.verbose == 2:
+                        progress.update(subtask, description="Computing distances", advance=1)
+
+                    min_dist = compute_all_distances_to_shapelet(
+                        X_, np.array([a.value for a in tscand]), dist_shapelet
                     )
 
-                shapelets[_len] = self.get_best_shapelet(y, tscand, min_dist)
+                    if self.verbose == 2:
+                        progress.update(
+                            subtask, advance=1, description="Finding best shapelet"
+                        )
 
-                if self.verbose == 2:
-                    progress.update(subtask, advance=1, description="Done")
-                    progress.remove_task(subtask)
-                    progress.update(task, advance=1)
+                    shapelets[_len] = self.get_best_shapelet(y, tscand, min_dist)
+
+                    if self.verbose == 2:
+                        progress.update(subtask, advance=1, description="Done")
+                        progress.remove_task(subtask)
+                        progress.update(task, advance=1)
 
         self.shapelets = shapelets
+        
+        return self
 
     def get_candidates_shapelets(self, y, X_, _len, subtask, progress):
         raw_data_subsequences = sliding_window_view(X_, _len, axis=1)
@@ -324,9 +330,8 @@ class FastShapelets:
         return self.shapelets
 
     def transform(self, X):
-        shapelets = np.array(
-            [el.value for el in self.get_shapelets().values()], dtype=np.float16
-        )
+        shapelets = [el.value for el in self.get_shapelets().values()]
+        
 
         return compute_all_distances_to_shapelet(
             scale(X), shapelets, self.dist_shapelet
