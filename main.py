@@ -36,6 +36,12 @@ if __name__ == '__main__' :
     shapelet_lengths = list(range(args.min_shap_len,args.max_shap_len+1, args.step_shap_len))
     fs = FastShapelets(shapelet_lengths=shapelet_lengths, cardinality=args.cardinality, dimensionality=args.dimensionality, r=args.r, n_jobs=args.n_jobs, verbose=args.verbose)
     fs.fit(X_train, y_train)
-        
-    with open(f'shap_{args.min_shap_len,args}_{max_shap_len+1}_{args.step_shap_len}.pkl', 'wb') as f:
+    
+    fn_save = f'shap_{args.min_shap_len}_{args.max_shap_len+1}_{args.step_shap_len}.pkl'
+    with open(fn_save, 'wb') as f:
         pickle.dump(fs.get_shapelets(), f)
+        
+    
+    print(f'file saved at {fn_save}')
+        
+    

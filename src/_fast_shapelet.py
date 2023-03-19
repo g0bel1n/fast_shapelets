@@ -32,7 +32,7 @@ class FastShapelets:
         cardinality: int = 10,
         r: int = 10,
         dimensionality: int = 16,
-        n_jobs=2,
+        n_jobs=1,
     ):
 
         self.verbose = verbose
@@ -71,7 +71,7 @@ class FastShapelets:
                 advance=1
             )
         elif self.verbose == 1:
-            print("Computing collision table...")
+            print("\t Computing collision table...")
 
         objs, original_2_unique_concat_array_map = self.reformat_sax_strings(
             sax_strings
@@ -232,6 +232,8 @@ class FastShapelets:
 
                     if self.verbose == 2:
                         progress.update(subtask, description="Computing distances", advance=1)
+                    if self.verbose ==1:
+                        print("\t Computing distances ")
 
                     min_dist = compute_all_distances_to_shapelet(
                         X_, np.array([a.value for a in tscand]), dist_shapelet
@@ -241,6 +243,8 @@ class FastShapelets:
                         progress.update(
                             subtask, advance=1, description="Finding best shapelet"
                         )
+                    if self.verbose ==1:
+                        print("\t Finding best shapelet ")
 
                     shapelets[_len] = self.get_best_shapelet(y, tscand, min_dist)
 
@@ -248,6 +252,8 @@ class FastShapelets:
                         progress.update(subtask, advance=1, description="Done")
                         progress.remove_task(subtask)
                         progress.update(task, advance=1)
+                        
+        assert type(shapelets)==dict, 'Precomputed shapelets should be of type dict[Shapelet]'
 
         self.shapelets = shapelets
         
