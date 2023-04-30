@@ -16,6 +16,9 @@ def download_dataset(dataset_name: str):
     :type dataset_name: str
     """
 
+    if not os.path.exists("data"):
+        os.mkdir("data")
+
     os.mkdir(f"data/{dataset_name}")
     dl_url = f"http://www.timeseriesclassification.com/Downloads/{dataset_name}.zip"
     print(f"Downloading {dataset_name} dataset from {dl_url.split('/')[2]} \n")
@@ -25,7 +28,7 @@ def download_dataset(dataset_name: str):
     os.system(f"unzip data/{dataset_name}.zip -d data/{dataset_name}/")
     os.system(f"rm data/{dataset_name}.zip")
 
-        # TODO: add arff support !!!!
+    # TODO: add arff support !!!!
 
     print(f"Converting {dataset_name} dataset to pickle \n")
     with open(f"data/{dataset_name}/{dataset_name}_TRAIN.txt", "r") as train_file:
